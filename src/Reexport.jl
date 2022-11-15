@@ -37,15 +37,27 @@ function reexport(m::Module, ex::Expr)
         modules = Any[e.args[end] for e in ex.args]
     end
 
-    names = GlobalRef(@__MODULE__, :exported_names)
+    exp_names = GlobalRef(@__MODULE__, :exported_names)
+    dep_names = GlobalRef(@__MODULE__, :deprecated_names)
+
     out = Expr(:toplevel, ex)
     for mod in modules
-        push!(out.args, :($eval($m, Expr(:export, $names($mod)...))))
+        push!(
+            out.args,
+            quote
+                $eval($m, Expr(:export, $exp_names($mod)...))
+                foreach(n -> Base.deprecate($m, n), $dep_names($mod))
+            end
+        )
     end
     return out
 end
 
-exported_names(m::Module) = filter!(x -> Base.isexported(m, x), names(m; all=true, imported=true))
+exported_names(m::Module) =
+    filter!(x -> Base.isexported(m, x), names(m; all=true, imported=true))
+
+deprecated_names(m::Module) =
+    filter!(x -> Base.isdeprecated(m, x), names(m; all=true, imported=true))
 
 export @reexport
 
